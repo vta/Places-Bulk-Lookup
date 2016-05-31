@@ -28,6 +28,7 @@
       var map;
       var infowindow;
       var sanjose = {lat: 37.330, lng: -121.89};
+      var markers = [];
 
       function initMap() {
         map = new google.maps.Map(document.getElementById('map'), {
@@ -36,8 +37,19 @@
         });
       }
 
-      function lookup(){
+      function reset(){
+        // clear output area
         $('#places_output').empty();
+
+        // clear markers on map
+        for (var i = 0; i < markers.length; i++) {
+          markers[i].setMap(null);
+        }
+        markers = [];
+      }
+
+      function lookup(){
+        reset()
         var in_text = $('#places_input').val();
         console.log(in_text);
         var re = /\s*\n\s*/;
@@ -94,6 +106,7 @@
           map: map,
           position: place.geometry.location
         });
+        markers.push(marker);
 
         google.maps.event.addListener(marker, 'click', function() {
           infowindow.setContent(place.name);
