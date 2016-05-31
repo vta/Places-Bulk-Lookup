@@ -70,12 +70,15 @@
       }
 
       function copyToClipboard(element) {
-        // http://stackoverflow.com/a/30905277/940217
-        var $temp = $("<input>");
-        $("body").append($temp);
-        $temp.val($(element).text()).select();
-        document.execCommand("copy");
-        $temp.remove();
+        // http://stackoverflow.com/a/30810322/940217
+        try {
+          $(element).select();
+          var successful = document.execCommand('copy');
+          var msg = successful ? 'successful' : 'unsuccessful';
+          console.log('Copying text command was ' + msg);
+        } catch (err) {
+          console.log('Oops, unable to copy');
+        }
       }
 
       function placeToCSV(placeObj){
