@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Place searches</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <script src="//code.jquery.com/jquery-1.12.0.min.js"></script>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      div {box-sizing: border-box;}
+      .full-width:first-child{margin-top:40px;}
+      .full-width {width:80%; margin-left:auto;margin-right:auto;}
+      .half {float:left; width:50%; padding:30px;}
+      #map {
+        height: 500px;
+      }
+      textarea, button {display:block;}
+    </style>
+    <script>
+      // This example requires the Places library. Include the libraries=places
+      // parameter when you first load the API. For example:
+      // <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places">
+
+      var map;
+      var infowindow;
+      var sanjose = {lat: 37.330, lng: -121.89};
+
+      function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: sanjose,
+          zoom: 11
+        });
+      }
+
+      function lookup(){
+        $('#places_output').empty();
+        var in_text = $('#places_input').val();
+        console.log(in_text);
+        var re = /\s*\n\s*/;
+        var nameList = in_text.split(re);
+
+        infowindow = new google.maps.InfoWindow();
+        var service = new google.maps.places.PlacesService(map);
+        
+        for (var i=0; i < nameList.length; i++){
+          if (nameList[i].length > 0){
+            service.nearbySearch({
+              location: sanjose,
+              radius: 50000,
+              keyword: nameList[i]
+            }, callback);
+          }
+        }
+      }
+
+      function copyToClipboard(element) {
+        // http://stackoverflow.com/a/30905277/940217
+        var $temp = $("<input>");
+        $("body").append($temp);
+        $temp.val($(element).text()).select();
+        document.execCommand("copy");
+        $temp.remove();
+      }
+
+      function placeToCSV(placeObj){
+        var res = [placeObj.name,
+        placeObj.geometry.location.lat(),
+        placeObj.geometry.location.lng(),
+        placeObj.vicinity,
+        '['+placeObj.types+']'];
+        return res.join(',');
+      }
+
+      function callback(results, status) {
+        if (status === google.maps.places.PlacesServiceStatus.OK) {
+          var out = $('#places_output');
+          var res = [];
+          for (var i = 0; i < results.length; i++) {
+            createMarker(results[i]);
+            // console.log(results[i]);
+            res.push(placeToCSV(results[i]));
+          }
+          $('#places_output').append(document.createTextNode(res.join('\n')+'\n'));
+        }
+      }
+
+      function createMarker(place) {
+        var placeLoc = place.geometry.location;
+        var marker = new google.maps.Marker({
+          map: map,
+          position: place.geometry.location
+        });
+
+        google.maps.event.addListener(marker, 'click', function() {
+          infowindow.setContent(place.name);
+          infowindow.open(map, this);
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <div class="full-width">
+      <div id="map"></div>
+    </div>
+    <div class="full-width">
+      <div class="half">
+      <h2>Places Input</h2>
+        <p>Enter in the names of the places you want to search, one per line.</p>
+      ​  <textarea id="places_input" rows="10" cols="70"></textarea>
+        <button id="places_submit_button" onclick="lookup()">Look Up</button>
+      </div>
+      <div class="half">
+      <h2>Places Output</h2>
+      <textarea id="places_output" rows="10" cols="70" readonly></textarea>
+      <button onclick="copyToClipboard('#places_output')">copy output to clipboard</button>
+      </div>
+    </div>
+    <script src="https://maps.googleapis.com/maps/api/js?&libraries=places&callback=initMap" async defer></script>
+  </body>
+</html>
