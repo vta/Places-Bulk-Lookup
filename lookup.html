@@ -84,7 +84,7 @@
             // console.log(results[i]);
             res.push(placeToCSV(results[i]));
           }
-          $('#places_output').append(document.createTextNode(res.join('\n')+'\n'));
+          $('#places_output').prepend(document.createTextNode(res.join('\n')+'\n'));
         }
       }
 
