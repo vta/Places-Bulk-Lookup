@@ -18,6 +18,8 @@
     var infowindow
     var sanjose = {lat: 37.330, lng: -121.89}
     var markers = []
+    var io_pairs = []
+    var have_results_for = 0
 
     function initMap () {
       map = new google.maps.Map(document.getElementById('map'), {
@@ -28,6 +30,8 @@
 
     function reset () {
       // clear output area
+      io_pairs = [];
+      have_results_for = 0;
       $('#places_output').empty()
       $('#copy_status').empty()
       // clear markers on map
@@ -48,14 +52,45 @@
       var service = new google.maps.places.PlacesService(map)
 
       for (var i = 0; i < nameList.length; i++) {
+        
         if (nameList[i].length > 0) {
+          io_pairs[i] = {};
+          io_pairs[i]['query'] = nameList[i];
           service.nearbySearch({
             location: sanjose,
             radius: 50000,
             keyword: nameList[i]
-          }, callback)
+          }, (function(index, results, status){
+            return function(results, status){
+               if (status === google.maps.places.PlacesServiceStatus.OK) {
+                  var out = $('#places_output')
+                  var res = []
+                  for (var i = 0; i < results.length; i++) {
+                    createMarker(results[i])
+                    console.log(results[i])
+                    res.push(placeToCSV(results[i]))
+                  }
+                  io_pairs[index]['result'] = res;
+                } else {
+                  io_pairs[index]['result'] = 'null'
+                }
+                have_results_for = have_results_for +1;
+                outputResults();
+            }
+          })(i))
         }
       }
+    }
+
+    function outputResults(){
+      if (have_results_for < io_pairs.length){
+        return
+      }
+      var res = [];
+      for (var i=0; i < io_pairs.length; i++){
+        res.push((i+1) + ',' +io_pairs[i]['result']);
+      }
+      $('#places_output').val(res.join('\n'))
     }
 
     function copyToClipboard (element) {
@@ -79,19 +114,6 @@
         placeObj.vicinity,
         '[' + placeObj.types + ']']
       return res.join(',')
-    }
-
-    function callback (results, status) {
-      if (status === google.maps.places.PlacesServiceStatus.OK) {
-        var out = $('#places_output')
-        var res = []
-        for (var i = 0; i < results.length; i++) {
-          createMarker(results[i])
-          // console.log(results[i])
-          res.push(placeToCSV(results[i]))
-        }
-        $('#places_output').prepend(document.createTextNode(res.join('\n') + '\n'))
-      }
     }
 
     function createMarker (place) {
