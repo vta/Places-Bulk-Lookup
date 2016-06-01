@@ -6,22 +6,24 @@
     <script src="//code.jquery.com/jquery-1.12.0.min.js"></script>
     <style>
       html, body { height:100%; margin:0; padding:0; }
-      div { box-sizing: border-box; }
+      div, fieldset, label, button { box-sizing: border-box; }
       .full-width:first-child{ margin-top:40px; }
       .full-width { width:80%; margin-left:auto; margin-right:auto; }
       .half { float:left; width:50%; padding:30px;}
       #map { height:500px; }
+      textarea, fieldset {width:100%;}
       textarea, button { display:block; }
+      fieldset label {display:block;}
     </style>
     <script>
-    var map
-    var infowindow
+    var map, infowindow, geocoder
     var sanjose = {lat: 37.330, lng: -121.89}
     var markers = []
     var io_pairs = []
     var have_results_for = 0
 
     function initMap () {
+      geocoder = new google.maps.Geocoder();
       map = new google.maps.Map(document.getElementById('map'), {
         center: sanjose,
         zoom: 11
@@ -43,43 +45,100 @@
 
     function lookup () {
       reset()
+      
       var in_text = $('#places_input').val()
       console.log(in_text)
       var re = /\s*\n\s*/
       var nameList = in_text.split(re)
 
       infowindow = new google.maps.InfoWindow()
-      var service = new google.maps.places.PlacesService(map)
 
+      var method = $('input[name=geo_method]:checked').attr('value');
+      
       for (var i = 0; i < nameList.length; i++) {
-        
+
         if (nameList[i].length > 0) {
-          io_pairs[i] = {};
-          io_pairs[i]['query'] = nameList[i];
-          service.nearbySearch({
-            location: sanjose,
-            radius: 50000,
-            keyword: nameList[i]
-          }, (function(index, results, status){
-            return function(results, status){
-               if (status === google.maps.places.PlacesServiceStatus.OK) {
-                  var out = $('#places_output')
-                  var res = []
-                  for (var i = 0; i < results.length; i++) {
-                    createMarker(results[i])
-                    console.log(results[i])
-                    res.push(placeToCSV(results[i]))
-                  }
-                  io_pairs[index]['result'] = res;
-                } else {
-                  io_pairs[index]['result'] = 'null'
-                }
-                have_results_for = have_results_for +1;
-                outputResults();
-            }
-          })(i))
+          io_pairs[i] = new LookupDat(nameList[i], i);
+          if (method === 'places'){
+            $('#places_output').text('loading...')
+            placesSearch(io_pairs[i])
+          } else if (method === 'geocoder'){
+            $('#places_output').text('loading...')
+            geocodeSearch(io_pairs[i])
+          } else if (method === 'both'){
+            $('#places_output').text('not yet implemented')
+          }
         }
       }
+    }
+
+    function getBoundsRadius(bounds){
+      // http://stackoverflow.com/a/37576519/940217
+      // r = radius of the earth in km
+      var r = 6378.8;
+      // degrees to radians (divide by 57.2958)
+      var ne_lat = bounds.getNorthEast().lat() / 57.2958
+      var ne_lng = bounds.getNorthEast().lng() / 57.2958
+      var c_lat = bounds.getCenter().lat() / 57.2958
+      var c_lng = bounds.getCenter().lng() / 57.2958
+      // distance = circle radius from center to Northeast corner of bounds
+      var r_km = r * Math.acos(
+        Math.sin(c_lat) * Math.sin(ne_lat) + 
+        Math.cos(c_lat) * Math.cos(ne_lat) * Math.cos(ne_lng - c_lng)
+        );
+      return r_km *1000; // radius in meters
+    }
+
+    function geocodeSearch(lookupDat){
+      var service = new google.maps.places.PlacesService(map)
+      geocoder.geocode( {
+          'address': lookupDat.query,
+          'bounds' : map.getBounds()
+      },function(results, status){
+       if (status == google.maps.GeocoderStatus.OK) {
+          for (var i = 0; i < results.length; i++) {
+            createMarker(results[i])
+            console.log(results[i])
+            //https://maps.googleapis.com/maps/api/place/details/json?placeid=ChIJN1t_tDeuEmsRUsoyG83frY4&key=YOUR_API_KEY
+            lookupDat.addResult(
+                results[i]['place_id'],
+                null, //name
+                results[i].geometry.location.lat(),
+                results[i].geometry.location.lng(),
+                results[i]['formatted_address']
+              )
+          }
+        }
+        have_results_for = have_results_for +1;
+        outputResults();
+      })
+    }
+
+    function placesSearch(lookupDat){
+      var service = new google.maps.places.PlacesService(map)
+      service.nearbySearch({
+        location: map.getBounds().getCenter(),
+        radius: getBoundsRadius(map.getBounds()),
+        keyword: lookupDat.query
+      },
+      function(results, status){
+       if (status === google.maps.places.PlacesServiceStatus.OK) {
+          
+          for (var i = 0; i < results.length; i++) {
+            createMarker(results[i])
+            console.log(results[i])
+            lookupDat.addResult(
+                results[i]['place_id'],
+                results[i]['name'], //name
+                results[i].geometry.location.lat(),
+                results[i].geometry.location.lng(),
+                results[i]['vicinity']
+              )
+          }
+        }
+        have_results_for = have_results_for +1;
+        outputResults();
+      })
     }
 
     function outputResults(){
@@ -88,9 +147,56 @@
       }
       var res = [];
       for (var i=0; i < io_pairs.length; i++){
-        res.push((i+1) + ',' +io_pairs[i]['result']);
+        res.push(io_pairs[i].toCSV());
       }
       $('#places_output').val(res.join('\n'))
+    }
+
+
+    var LookupDat = function(q, i){
+      this.query = q
+      this.index = i
+      this.results = []
+    }
+
+    LookupDat.prototype.addResult = function(place_id, name, lat, lng, address){
+      this.results.push({
+        'place_id' : place_id,
+        'name' : name,
+        'lat' : lat,
+        'lng' : lng,
+        'address' : address
+      })
+    }
+
+    LookupDat.prototype.toCSV = function() {
+      var csv_out = [];
+      for (var i = 0; i < this.results.length; i++) {
+        var res = this.results[i]
+        csv_out.push([
+          '"'+this.query+'"',
+          '"'+res.name+'"',
+          res.lat,
+          res.lng,
+          '"'+res.address+'"',
+          res.place_id].join(','))
+      }
+      return csv_out.join('\n')
+    }
+
+
+    function createMarker (place) {
+      var placeLoc = place.geometry.location
+      var marker = new google.maps.Marker({
+        map: map,
+        position: place.geometry.location
+      })
+      markers.push(marker)
+
+      google.maps.event.addListener(marker, 'click', function () {
+        infowindow.setContent(place.name)
+        infowindow.open(map, this)
+      })
     }
 
     function copyToClipboard (element) {
@@ -107,29 +213,6 @@
       }
     }
 
-    function placeToCSV (placeObj) {
-      var res = [placeObj.name,
-        placeObj.geometry.location.lat(),
-        placeObj.geometry.location.lng(),
-        placeObj.vicinity,
-        '[' + placeObj.types + ']']
-      return res.join(',')
-    }
-
-    function createMarker (place) {
-      var placeLoc = place.geometry.location
-      var marker = new google.maps.Marker({
-        map: map,
-        position: place.geometry.location
-      })
-      markers.push(marker)
-
-      google.maps.event.addListener(marker, 'click', function () {
-        infowindow.setContent(place.name)
-        infowindow.open(map, this)
-      })
-    }
-
     </script>
   </head>
   <body>
@@ -138,13 +221,23 @@
     </div>
     <div class="full-width">
       <div class="half">
-      <h2>Places Input</h2>
+      <h2>Input</h2>
         <p>Enter in the names of the places you want to search, one per line.</p>
+        <fieldset>
+          <legend>Search method</legend>
+          <label><input type="radio" name="geo_method" checked="checked" value="places"> Places API (get name+location from name)</label>
+          <label><input type="radio" name="geo_method" value="geocoder"> Geocoder (get location from addresses)</label>
+          <!--<label><input type="radio" name="geo_method" value="both"> Geocoder + Places API (get name+location from addresses)</label>-->
+        </fieldset>
       ​  <textarea id="places_input" rows="10" cols="70"></textarea>
         <button id="places_submit_button" onclick="lookup()">Look Up</button>
       </div>
       <div class="half">
-      <h2>Places Output</h2>
+      <h2>Output</h2>
+      <p>A single input may result in multiple outputs, so each line of output is grouped with its respective input.</p>
+      <p>The output is formatted as CSV, with values as:</br>
+      "input", "name", latitude, longitude, "address", place_id
+      </p>
       <textarea id="places_output" rows="10" cols="70" readonly></textarea>
       <button onclick="copyToClipboard('#places_output')">copy output to clipboard</button>
       <span id="copy_status"></span>
